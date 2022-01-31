@@ -32,18 +32,29 @@ Rx = lambda th: np.array([[1,0,0],
                           [0,cos(th),-sin(th)],
                           [0,sin(th),cos(th)]])
 
-
-def get_namelist(param, traj_path, traj_num, resnum="11"):
-    
-    u = mda.Universe(param, traj_path+str(traj_num)+".nc", format="TRJ")
-    
-    sel1 = u.select_atoms("resid "+resnum)
-    
-    return sel1.atoms.names
-    
-    
-
 def get_dihedral(param, traj_path, ntrajs=8, reps=['A','B'],resnum1='11',resnum2='12'):
+    """
+    Returns the list of dihedral angles for a trajectory, averaged over the repetitions.  
+
+    Parameters
+    ----------
+    param : string. The .prmtop parameter file       
+    traj_path : string. The location of the .nc trajectory file, 
+                including the file prefix and excluding the rep and traj number identifier.
+    ntrajs : int. Total number of trajectory files per rep. The default is 8.
+    reps : list. A list of strings with the reps labels (as in the file format).
+            The default is ['A','B'].
+    resnum1 : string, The residue id of the first monomer. The default is '11'.
+    resnum2 : string, The residue id of the second monomer. The default is '12'.
+
+    Returns
+    -------
+    dih_1/dih_2 : numpy array. Dihedrals for molecules 1 and 2 
+    names1. names2 : tuple. Of arrays with the atom names in the dihedral.
+                        (atom1, atom2, atom3, atom4)
+    
+
+    """
     
     both_dih1 = []
     both_dih2 = []    
@@ -75,16 +86,10 @@ def get_dihedral(param, traj_path, ntrajs=8, reps=['A','B'],resnum1='11',resnum2
                 
                 dihedrals1 = sel1.dihedrals
                 dihedrals2 = sel2.dihedrals
-     
-                dihs1 = dihedrals1.dihedrals()
-                dihs2 = dihedrals2.dihedrals()
-            
-                dih1.append(dihs1)
-                dih2.append(dihs2)
+
+                dih1.append(dihedrals1.dihedrals())
+                dih2.append(dihedrals2.dihedrals())
                 
-        dihs1 = np.array(dih1)
-        dihs2 = np.array(dih2)
-    
         both_dih1.append(dih1)
         both_dih2.append(dih2)
         
@@ -100,12 +105,30 @@ def get_dihedral(param, traj_path, ntrajs=8, reps=['A','B'],resnum1='11',resnum2
     atom2_2 = dihedrals2.atom2.names
     atom3_2 = dihedrals2.atom3.names
     atom4_2 = dihedrals2.atom4.names
+    
+    names1 = (atom1_1,atom2_1,atom3_1,atom4_1)
+    names2 = (atom1_2,atom2_2,atom3_2,atom4_2)
 
     
-    return dih_1,dih_2, (atom1_1,atom2_1,atom3_1,atom4_1), (atom1_2,atom2_2,atom3_2,atom4_2)
+    return dih_1, dih_2, names1, names2
 
 
 def RAB_calc(u, dt, selA, selB, Rabs=[]):
+    """
+    Function to calculate center of mass distance between A and B.
+
+    Parameters
+    ----------
+    u : MDAnalysis universe. Object containing loaded trajectory.
+    dt : int. Time step. =
+    selA/selB : string. Selection keyword for molecules A, B.
+    Rabs : list, optional. List of previously calculated distances, if any.
+
+    Returns
+    -------
+    Rabs : list. Calculated distances. 
+
+    """
     
     num_sol = len(u.trajectory)
     istep = 1
@@ -124,6 +147,25 @@ def RAB_calc(u, dt, selA, selB, Rabs=[]):
     return Rabs
 
 def get_RAB(param, traj_path, rep, ntrajs=8, traji=1, dt=5, resnum1='11', resnum2='12'):
+    """
+    Returns an array with the center of mass distance along a trajectory
+
+    Parameters
+    ----------
+    param : string. Paramenter file.
+    traj_path : string. Location of the trajectory .nc file, including file prefix.
+    rep : string. Name given to trajectory repetition.
+    ntrajs : int. Numper of trajectory file to include.
+    traji : initial trajectory file to include in the output.
+    dt : int. Time step.
+    resnum1 : string, The residue id of the first monomer. The default is '11'.
+    resnum2 : string, The residue id of the second monomer. The default is '12'.
+
+    Returns
+    -------
+    RAB : NumPy array.Center of mass distance along the trajectory.
+
+    """
         
     selA = "resid "+resnum1
     selB = "resid "+resnum2
@@ -141,9 +183,7 @@ def get_RAB(param, traj_path, rep, ntrajs=8, traji=1, dt=5, resnum1='11', resnum
             
     Rabs = np.array(Rabs)
     RAB = np.linalg.norm(Rabs,axis=1)
-    print(RAB.shape)
      
-    # RAB = np.average(np.array(both_RAB),axis=0)
     return RAB
 
 
@@ -154,20 +194,21 @@ def get_coords(path, param_file, select, file_idx=None, dt=2, resnum1='11', resn
 
     Parameters
     ----------
-    path : String
-        Location of traj files.
-    tdye : String
-        "I" or "II", the type of the dimer.
-    select : int
-        The index of the time-frame to extract.
-    rep : String
-        "A", "B", "C" or "D"
+    path : String. Path of the trajectory file .nc including file preffix.
+    param_file : String. Parameter .prmtop file.
+    sfile_idx : int. The index of the file trajectory to extract.
+    select : Index of the frame to extract.
+    dt : int. Time step.
+    resnum1 : string, The residue id of the first monomer. The default is '11'.
+    resnum2 : string, The residue id of the second monomer. The default is '12'.
+    cap : Whether to cap phosphate molecules with hydrogen atoms.
+    
 
     Returns
     -------
     Parameters of H-capped Dimer at the selected time-frame.
     Format is: ( xyzA, xyzB, namesA, namesB, atom_typesA, atom_typesB, 
-                 [list of bonds]A, [list of bonds]B )
+                 [list of bonds]A, [list of bonds]B, CofMA, CofMB)
 
     """
     
@@ -221,22 +262,21 @@ def get_coords(path, param_file, select, file_idx=None, dt=2, resnum1='11', resn
 
     return xyzA, xyzB, namesA, namesB, typA, typB, bondsA, bondsB, CofMA, CofMB
 
-def get_pyscf(traj_file, param, select, resnums, new_coords=None):
+def get_pyscf(path, param_file, select, file_idx=None, dt=2, resnum1='11', resnum2='12', new_coords=None):
     """
     Given a selected time-frame, it returns the molecule's coords as a PySCF 
         formatted string.
 
     Parameters
     ----------
-    path : String
-        Location of traj files.
-    tdye : String
-        "I" or "II", the type of the dimer.
-    select : int
-        The index of the time-frame to extract.
-    rep : String
-        "A", "B", "C" or "D"
-    new_coords : numpy array, optional
+    path : String. Path of the trajectory file .nc including file preffix.
+    param_file : String. Parameter .prmtop file.
+    file_idx : int. The index of the file trajectory to extract.
+    select : Index of the frame to extract.
+    dt : int. Time step.
+    resnum1 : string, The residue id of the first monomer. The default is '11'.
+    resnum2 : string, The residue id of the second monomer. The default is '12'.
+    new_coords : numpy array, optional. 
        If given, modified coordinates are used instead of those in the frame.
 
     Returns
@@ -245,34 +285,34 @@ def get_pyscf(traj_file, param, select, resnums, new_coords=None):
 
     """
 
-    dt = 20
-    time_i = select * dt
-
-    if select < 100:
-
-        i_file = int(time_i/250) + 1
-        idx = select*2 % 25
-        dt = 5
+    if path[-2:] == 't7':
+        #To get universe from a rst7 file
+        u = mda.Universe(param_file, path, format="RESTRT")
+        select = 0
+        dt = 1
+    elif path[-2:] == 'db':
+        #To get universe from a pdb file
+        u = mda.Universe(path, format="PDB")
+        select = 0
+        dt = 1
     else:
-
-        i_file = int((time_i-2000)/1000) + 1
-        idx = (select-100) % 100
-        dt = 2
-
-    u = mda.Universe(param, traj_file+str(i_file)+".nc", format="TRJ")
+        #To get universe form a nc trajectory
+        traj_file = path
+        u = mda.Universe(param_file, traj_file+str(file_idx)+".nc", format="TRJ")
+        print("The param file is: %s \n" % (param_file),
+              "And the traj files is: ",traj_file+str(file_idx)+".nc")
+        
     for fi, ts in enumerate(u.trajectory[::dt]):
 
-        if fi == idx:
-
-            sel1, sel2 = resnums
-
-            xyzA,xyzB,RAB = cu.Process_MD(u,sel1,sel2,coord_path="coord_files/MD_atoms", new_coords=new_coords)
+        if fi == select:
+            xyzA,xyzB,RAB = cu.Process_MD(u,resnum1,resnum2,coord_path="coord_files/MD_atoms", new_coords=new_coords)
 
     return xyzA, xyzB
 
 def coord_transform(xyzA, xyzB, namesA, namesB, rot_angles, dr=None, assign=None):
-    """ Transform given coordinates by rotation and translation. 
-            Can be used for any number of molecules of two types, A and B.
+    """ 
+    Transform given coordinates by rotation and translation. 
+    Can be used for any number of molecules of two types, A and B.
 
     Parameters
     ----------
@@ -340,14 +380,9 @@ def atom_dist(a1,a2,coord1,coord2):
 
     Parameters
     ----------
-    a1 : int
-        index of atom 1.
-    a2 : int
-        index of atom 2.
-    coord1 : ndarray
-        array listing molecule's #1 coordinaties.
-    coord2 : TYPE
-        array listing molecule's #2 coordinaties.
+    a1 : int. Index of atom 1.
+    a2 : int. Index of atom 2.
+    coord1 : ndarray. Array listing molecule's 1 and 2 coordinates.
 
     Returns
     -------
@@ -359,7 +394,7 @@ def atom_dist(a1,a2,coord1,coord2):
 
 def multipole_coup(pos1, pos2, ch1, ch2, at1, at2, atH1, atH2):
     """
-    Calculates multiple coupling from inter-atomic distance and atomic excited
+    Calculates Transition Monopole coupling from inter-atomic distance and atomic excited
         state partial charges
 
     Parameters
@@ -373,7 +408,7 @@ def multipole_coup(pos1, pos2, ch1, ch2, at1, at2, atH1, atH2):
 
     Returns
     -------
-    Vij : (float) mulitipole coupling
+    Vij : float. Coupling according to transition monopoles approximation.
 
     """   
     from scipy.spatial.distance import cdist
@@ -384,11 +419,9 @@ def multipole_coup(pos1, pos2, ch1, ch2, at1, at2, atH1, atH2):
     at1 -= at1[0]
     at2 -= at2[0]
     
-    #distsum = np.array([[atom_dist(a1,a2,pos1,pos2) for a2 in at2-1] for a1 in at1-1]) #array (natoms1 x natoms2)
     distsum = cdist(pos1,pos2) 
     
     # Distance between non-H atoms
-    #distsum_noH = np.array([[atom_dist(a1,a2,pos1,pos2) for a2 in atH2-1] for a1 in atH1-1]) #array (natoms1 x natoms2)
     pos_nH1 = pos1[atH1]
     pos_nH2 = pos2[atH2]
     distsum_noH = cdist(pos_nH1, pos_nH2)
@@ -468,22 +501,6 @@ def get_mol(coords, names, types, bonds, res_names):
     assert coord_array.shape == (natoms, 3)
     mol_new.atoms.positions = coord_array
 
-    # Adding bonds
-    """
-    n_acum = 0
-    all_bonds = []
-   
-    for imol in range(n_residues):
-        bond = bonds[imol] - np.min(bonds[imol])
-        d_bd = [bond[i] + n_acum for i in range(len(bond))]
-        all_bonds.append(d_bd)
-        n_acum += len(names[imol])
-    """
-     
-    #bonds0 = np.concatenate(tuple(all_bonds),axis=0)
-    #atbonds = list(map(tuple, bonds0))
-
-    #mol_new.add_TopologyAttr('bonds', atbonds)
     
     return mol_new
 
@@ -537,20 +554,17 @@ def get_charges(u, pos_ion, neg_ion):
     return coords, charges
 
 
-def solvent_coords(path, tdye, select, rep):
+def solvent_coords(path, param_file, file_idx, select, dt=2):
     """
-    Given a selected time-frame, it returns the (MDAnalysis) molecule params.    
+    Returns the corrdinates of the solvent charge particles.    
 
     Parameters
     ----------
-    path : String
-        Location of traj files.
-    tdye : String
-        "I" or "II", the type of the dimer.
-    select : int
-        The index of the time-frame to extract.
-    rep : String
-        "A", "B", "C" or "D"
+    path : String. Path of the trajectory file .nc including file preffix.
+    param_file : String. Parameter .prmtop file.
+    file_idx : int. The index of the file trajectory to extract.
+    select : Index of the frame to extract.
+    dt : int. Time step.
 
     Returns
     -------
@@ -559,36 +573,27 @@ def solvent_coords(path, tdye, select, rep):
                  [list of bonds]A, [list of bonds]B )
 
     """
-    
-    typ = 'Opp' if tdye == 'II' else ''
-    if rep == 'C':
-        param_files = lambda ty: 'Sq' + ty + '_dimer_g1.prmtop'
-    elif rep == 'D':
-        param_files = lambda ty: 'Sq' + ty + '_dimer_g2.prmtop'
-    else:
-        param_files = lambda ty: 'Sq' + ty + '_dimer.prmtop'
 
-    dt_both = 20
-    time_i = select * dt_both
-    
-    if select < 100:
-        i_file = int(time_i/250) + 1 
-        idx = select*2 % 25
-        dt = 5
+    if path[-2:] == 't7':
+        #To get universe from a rst7 file
+        u = mda.Universe(param_file, path, format="RESTRT")
+        select = 0
+        dt = 1
+    elif path[-2:] == 'db':
+        #To get universe from a pdb file
+        u = mda.Universe(path, format="PDB")
+        select = 0
+        dt = 1
     else:
-        last_file = 8
-        i_file = int((time_i-2000)/1000) + 1 + last_file
-        idx = (select-100) % 100
-        dt = 2
-
-    
-    u = mda.Universe("%s/%s" % (path, param_files(typ)),
-                            "%s/prod/Sq%sDim_prod%s" % (path, typ, rep) + str(i_file) + ".nc", format="TRJ")
-    print("The param file is: %s/%s \n" % (path, param_files(typ)),
-          "And the traj files is: %s/prod/Sq%sDim_prod%s" % (path, typ, rep) + str(i_file) + ".nc")
+        #To get universe form a nc trajectory
+        traj_file = path
+        u = mda.Universe(param_file, traj_file+str(file_idx)+".nc", format="TRJ")
+        print("The param file is: %s \n" % (param_file),
+              "And the traj files is: ",traj_file+str(file_idx)+".nc")
+        
     for fi, ts in enumerate(u.trajectory[::dt]): 
             
-        if fi == idx:
+        if fi == select:
             t_i = round((ts.frame*10),2)
             print("The time-step is: ", t_i)
             
@@ -596,10 +601,28 @@ def solvent_coords(path, tdye, select, rep):
 
     return coord, charge
 
-def get_pdb(traj_path, param_path, path_save, resnums, select=(1,0), dt=2, MDA_selection='all'):
+def get_pdb(path, param_file, path_save, resnums, select=(1,0), dt=2, MDA_selection='all'):
+    """
+    Returns pdb file of trajectory snapshot of indicated residues.
+
+    Parameters
+    ----------
+    path : String. Path of the trajectory file .nc including file preffix.
+    param_file : String. Parameter .prmtop file.
+    path_save : String. Path to save pdb file.
+    resnums : tuple/list. Residue ids for the dimer molecules.
+    select : tuple/list. (File index, frame index).
+    dt : int. Time step.
+    MDA_selection : string, optional. MDAnalisys selection for the pfb to save.
+
+    Returns
+    -------
+    orig_all : MDAnalysis object that was saved in the pdb.
+
+    """
     
     i_file, idx = select
-    xyza, xyzb, namesA, namesB, typeA, typeB, bondsA, bondsB, __, __ = get_coords(traj_path, param_path, 
+    xyza, xyzb, namesA, namesB, typeA, typeB, bondsA, bondsB, __, __ = get_coords(path, param_file, 
                                                                           idx, file_idx=i_file, dt=dt, 
                                                                           resnum1=resnums[0], resnum2=resnums[1])
 
@@ -610,46 +633,24 @@ def get_pdb(traj_path, param_path, path_save, resnums, select=(1,0), dt=2, MDA_s
     orig_all = orig_mol.select_atoms(MDA_selection)
     orig_all.write(path_save)    
     return orig_all
-    
 
-def max_pdb(Vi,traj_path,param_path,resnums,path_save,sel='all'):
+def COM_atom(COM, xyz, names):
     """
-    Generate a pdb of the dimer coordinates at max VFE/VCT
+    Find the atom closest to the center of mass in a molecule.
+
+    Parameters
+    ----------
+    COM : Numpy array. Center of mass (x,y,z) coordinates
+    xyz : Numpy array. Atom coordinates.
+    names : Numpy array. List of atom names in molecule.
 
     Returns
     -------
-    None.
+    Index of closest atom.
+    (x,y,z) Coordinates of closest atom.
+    Name of closes atom
 
     """
-    
-    max_V = np.argmax(Vi)
-    print(max_V)
-    
-    dt_both = 20
-    time_i = max_V * dt_both
-    
-    '''
-    if max_V < 100:
-
-        i_file = int(time_i/250) + 1
-        idx = max_V*2 % 25
-        dt = 5
-    
-    else:
-    '''
-    last_file = 6
-    i_file = int((time_i-2000)/1000) + 1 + last_file
-    idx = (max_V-100) % 100
-    dt = 1
-    
-    
-    obj = get_pdb(traj_path, param_path, path_save, resnums, select=(i_file,idx), 
-            dt=dt, MDA_selection=sel)
-    
-    
-    return obj
-
-def COM_atom(COM, xyz, names):
     diff = abs(xyz - COM)
     diff_glob = np.mean(diff, axis=1)
     closer_idx = np.argmin(diff_glob)
@@ -680,7 +681,26 @@ def energy_diagram(file_list, global_min, time):
 def displaced_dimer(sel1, sel2, cof_dist, disp, 
                     atom_orig='N1', atom_z='N2', atom_y='C2', 
                     res_names=['SQA', 'SQB']):
+    """
+    Returns dimer where monomers are displaced from each other by the given parameters.
+
+    Parameters
+    ----------
+    sel1/sel2 : MDAnalsys selection. Molecules 1 and 2.
+    cof_dist : Numpy array. Desired center of mass distance between monomers.
+    disp : Numpy array. Vertical displacement between molecules.
+    atom_orig : string. Atom to be placed at the origin.
+    atom_z : string. Atom that will define the z axis vector of the molecule (from the origin).
+    atom_y : string. Atom that will define the y axis vector of the molecule.
+    res_names : list. Residue names for the final MDAnalysis object. The default is ['SQA', 'SQB'].
+
+    Returns
+    -------
+    MDAnalysis object of the new dimer.
+
+    """
     
+
     
     xyz1 = sel1.positions 
     xyz2 = sel2.positions
@@ -742,9 +762,6 @@ def displaced_dimer(sel1, sel2, cof_dist, disp,
     rot2 = xyz2_new[idx2C]
     psi2 = np.arccos(rot2[1]/LA.norm(rot2))
     xyz2_new = rodrigues(xyz2_new, psi2, x_unit)
-    
-    
-    #xyz2_new -= xyz2_new[idx2A]
     
     
     #displacing sel2 on the x axis only

@@ -9,13 +9,9 @@ Created on Mon Apr 12 15:55:49 2021
 """
 
 import numpy as np
-import h5py
 import scipy.linalg
-from pyscf import gto, scf, tdscf, lib, dft, lo, solvent
-from functools import reduce
+from pyscf import gto, scf, lib, dft, solvent
 
-#MD analysis tools
-import MDAnalysis
 from csv import reader
 
 # =============================================================================
@@ -28,13 +24,13 @@ def td_chrg_lowdin(mol, dm):
     
     Parameters
     ----------
-    mol. PySCF Molecule Object
-    dm. Numpy Array. Transition Density Matrix in Atomic Orbital Basis
+    mol: PySCF Molecule Object
+    dm: Numpy Array. Transition Density Matrix in Atomic Orbital Basis
     
     Returns
     -------
-    pop. Numpy Array. Population in each orbital.
-    chg. Numpy Array. Charge on each atom.
+    pop: Numpy Array. Population in each orbital.
+    chg: Numpy Array. Charge on each atom.
     """
     #Atomic Orbital Overlap basis
     s = scf.hf.get_ovlp(mol)
@@ -58,20 +54,16 @@ def td_chrg_lowdin(mol, dm):
 def jk_ints_eff(molA, molB, tdmA, tdmB, calcK=False):
     """
     A more-efficient version of two-molecule JK integrals.
-    This implementation is a bit blackbox and relies and calculation the HF
-    potential before trying to calculate couplings. 
 
     Parameters
     ----------
-    molA/molB : PySCF Mol Obj. Molecule A and Molecule B.
+    molA/molB : PySCF Mol. Molecule A and Molecule B.
     tdmA/tdmB : Numpy Array. Transiiton density Matrix
 
     Returns
     -------
-    cJ ~ Coulomb Coupling
-    cK ~ Exchange Coupling
-    
-    V_{ab} = 2J - K
+    cJ : Coulomb Coupling
+    cK : Exchange Coupling
     """
     
     from pyscf.scf import jk, _vhf
@@ -144,21 +136,17 @@ def V_Coulomb(molA, molB, tdmA, tdmB, calcK=False):
 
 def V_multipole(molA,molB,chrgA,chrgB):
     """
-    Coupling according to the multiple approximation
+    Coupling according to the transition monopole approximation
     
     Parameters
     ----------
-    molA : pyscf mol
-        molecule A.
-    molB : pyscf mol
-        molecule B.
-    chrgA : ndarray
-    chrgB : ndarray
+    molA/molB : PySCF Mol. Molecule A and molecule B.
+    chrgA/chrgB : Numpy array. Lowdin Transition Partial Charges of molecules A, B
 
     Returns
     -------
     Vij : float
-        The Coulombic coupling in the monpole approx
+        The Coulombic coupling in the transition monopole approx.
 
     """
     
@@ -169,16 +157,31 @@ def V_multipole(molA,molB,chrgA,chrgB):
 
     return Vij
 
-def V_pdipole(td1,td2,rAB):
+def V_pdipole(tdA,tdB,rAB):
+    """
+    Coupling according to the point dipole approximation.
+
+    Parameters
+    ----------
+    tdA, tdB : Numpy array. Transition dipole moment for Molecule A and B.
+    rAB : Numpy array. Center of mass distance vector between chromophores.
+
+    Returns
+    -------
+    Vij: float
+        The Coulombic coupling in the point dipole approx.
+
+    """
     
     const = 1 #a.u.
     rAB *= 1.8897259886
-    miuAnorm = abs(np.linalg.norm(td1))
-    miuBnorm = abs(np.linalg.norm(td2))
+    miuAnorm = abs(np.linalg.norm(tdA))
+    miuBnorm = abs(np.linalg.norm(tdB))
     RABnorm = np.linalg.norm(rAB)
-    num = np.dot(td1,td2)-3*np.dot(td1,rAB)*np.dot(td2,rAB)
-
-    return (miuAnorm*miuBnorm/const)*num/RABnorm**3
+    num = np.dot(tdA,tdB)-3*np.dot(tdA,rAB)*np.dot(tdB,rAB)
+    
+    Vij = (miuAnorm*miuBnorm/const)*num/RABnorm**3
+    return Vij
 
 def transfer_CT(molA,molB,o_A,o_B,v_A,v_B):
     '''
@@ -186,23 +189,15 @@ def transfer_CT(molA,molB,o_A,o_B,v_A,v_B):
 
     Parameters
     ----------
-    molA, molB : Pyscf HF molecules
-    o_A, o_B  : ndarray
-        Occupied orbitals.
-    v_A,v_B : ndarray
-        Virtual orbitals.
+    molA/molB : PySCF Mol. Molecules A and B
+    o_A/o_B  : Numpy array. Occupied orbitals.
+    v_A/v_B : Numpy array. Virtual orbitals.
 
     Returns
     -------
-    te : float
-        Electron transfer integral.
-    th : float
-        Hole transfer integral.
+    te/th : float. Electron transfer integral and Hole transfer integral.
 
     '''
-    from pyscf import ao2mo
-
-    naoA = molA.nao #of atomic orbitals in molecule A
     
     #1 electron integrals between molA and molB, AO basis
     eri_AB = gto.intor_cross('int1e_ovlp',molA,molB) 
@@ -218,50 +213,50 @@ def transfer_CT(molA,molB,o_A,o_B,v_A,v_B):
     print(eri_ij[0][0],eri_ij[-1][-1])
     return te,th
 
-def V_CT(te,th,mf,Egap,rab):
+def V_CT(te, th, rab, mfAB=None, Egap=None):
     """
     CT coupling
 
     Parameters
     ----------
-    te, th : float
-        electron/hole transfer int.
-    mfA, mfB : Mean-field PySCF objects
-    Egap : float
-        Transition energy from TDDFT
-    rab : ndarray
-        center of mass distance vector between chromophores.
+    te/th : float. electron/hole transfer integrals.
+    mfAB : Mean-field PySCF object. DFT result for the dimer.
+    Egap : float. Transition energy gap (i.e., Ea-Eb) from TDDFT.
+    rab : Numpy array.  Center of mass distance vector between chromophores.
 
     Returns
     -------
-    float
+    Vij: float. 
         CT coupling.
 
     """
     RAB = np.linalg.norm(rab)*1.8897259886 #Ang to a.u.
-   
-    #Energy of frontier orbitals
-    #EL = mf.mo_energy[mf.mo_occ==0][0]
-    #EH = mf.mo_energy[mf.mo_occ!=0][-1]
 
-    #Fundamental gap
-    #Eg = EL - EH
-    #optical gap
-    #Eopt = Egap
-    #Local Binding energy
-    #U = Eg - Eopt 
-    U = 0.7*0.0367493
+    if Egap is None:
+        U = 0.7*0.0367493 #fixed at 7eV
+    else:        
+        # Energy of frontier orbitals
+        EL = mfAB.mo_energy[mfAB.mo_occ==0][0]
+        EH = mfAB.mo_energy[mfAB.mo_occ!=0][-1]
+    
+        # Fundamental gap
+        Eg = EL - EH
+        # optical gap
+        Eopt = Egap
+        # Local Binding energy
+        U = Eg - Eopt 
+        
     #Coulomb Binding energy
-    perm = 1 #4*pi*e_0 in a.u.
-    er = 77.16600 #water at 301.65K and 1 bar
+    perm = 1 # 4*pi*e_0 in a.u.
+    er = 77.16600 # water at 301.65K and 1 bar
     
     elect = 1 #charge of e-
     V = elect**2/(perm*er*RAB)
     domega = U-V
+    
+    Vij = -2*te*th/(domega), domega, np.linalg.norm(rab)
 
-    return -2*te*th/(domega), domega, np.linalg.norm(rab)
-
-
+    return Vij
 
 def transfer_sym(mf):
     '''
@@ -269,15 +264,12 @@ def transfer_sym(mf):
 
     Parameters
     ----------
-    molA,molB : Pyscf molecule
+    mf: Mean-field PySCF object. DFT result for the dimer.
 
     Returns
     -------
-    te : float
-        e- transfer integral
-    th : float
-        h+ transfer integral
-
+    te/th : float.
+        electron and hole transfer integrals
     '''
     
     #MOs for the dimer
@@ -295,13 +287,32 @@ def transfer_sym(mf):
     
     return te,th
 
-def dimer_dft(molA,molB,xc_f='b3lyp',verb=4):
+def dimer_dft(molA, molB, xc_f='b3lyp', verb=4):
+    """
+    Permorm a DFT calculation for the dimer A+B with implicit solvation.
+
+    Parameters
+    ----------
+    molA/molB : PySCF Mol object. Molecules and B.
+    xc_f : string, optional
+        DFT functional. The default is 'b3lyp'.
+    verb : int, optional
+        SCF verbose level. The default is 4.
+
+    Returns
+    -------
+    mol : PySCF Mol object. For the dimer A+B.
+    mf : Mean-field PySCF object. DFT result for the dimer.
+    occ : Numpy array. Occupied orbitals.
+    virt : Numpy array. Virtual orbitals.
+
+    """
     mol = molA+molB
     mol.verbose = verb
     mf = scf.RKS(mol)
     mf.xc= xc_f
     #Run with COSMO implicit solvent model
-    mf = solvent.ddCOSMO(mf).run()#mf.run()
+    mf = solvent.ddCOSMO(mf).run()
     
     mo = mf.mo_coeff #MO Coefficients
     occ = mo[:,mf.mo_occ!=0] #occupied orbitals
@@ -309,8 +320,30 @@ def dimer_dft(molA,molB,xc_f='b3lyp',verb=4):
 
     return mol,mf,occ,virt
 
-def do_dft(coord,basis='6-31g',xc_f='b3lyp',mol_ch=0,spin=0,verb=4):
-        
+def do_dft(coord, basis='6-31g', xc_f='b3lyp', mol_ch=0, spin=0, verb=4):
+    """
+    Perform a DFT calculation for a single molecule, using implicit solvation.
+
+    Parameters
+    ----------
+    coord : Numpy array. (x,y,z) coordinates of the molecule.
+    basis : string, optional
+        Basis set. The default is '6-31g'.
+    xc_f : string, optional
+        DFT functional. The default is 'b3lyp'.
+    mol_ch : int, optional. Total charge of the molecule. The default is 0.
+    spin : int, optional. Spin for the molecule. The default is 0.
+    verb : int, optional. SCF verbose level. The default is 4.
+    
+
+    Returns
+    -------
+    mol : PySCF Mol object. For the molecule.
+    mf : Mean-field PySCF object. DFT result for the molecule.
+    occ : Numpy array. Occupied orbitals.
+    virt : Numpy array. Virtual orbitals.
+
+    """      
     #Make Molecule Object
 
     #Make SCF Object, Diagonalize Fock Matrix
@@ -322,30 +355,28 @@ def do_dft(coord,basis='6-31g',xc_f='b3lyp',mol_ch=0,spin=0,verb=4):
     #Run with COSMO implicit solvent model
     mf = solvent.ddCOSMO(mf).run()#mf.run()
     
-    mo = mf.mo_coeff #MO Coefficients
-    occ = mo[:,mf.mo_occ!=0] #occupied orbitals
-    virt = mo[:,mf.mo_occ==0] #virtual orbitals   
+    mo = mf.mo_coeff # MO Coefficients
+    occ = mo[:,mf.mo_occ!=0] # occupied orbitals
+    virt = mo[:,mf.mo_occ==0] # virtual orbitals   
 
     return mol,mf,occ,virt
 
 def do_tddft(mf,o_A,v_A,state_id=0):
     """  
-
+    Perform a TDDFT calculation on molecule A
     Parameters
     ----------
-    mf : pyscf scf object
-        result from DFT
-    o_A : ndarray
-        Occupied orbitals
-    v_A : ndarray
-        Virtual orbitals
-    state_ids : list 
-        Wanted excitated states 
-        (e.g., [0,1] returns fro 1st and 2nd exc states)
+    mf : PySCF mean field object. Result from DFT calculation.
+    o_A : Numpy array. Occupied orbitals.
+    v_A : Numpy array. Virtual orbitals.
+    state_id : int or list, optional. Excitated state to output.
+               If a list is given, will output a list of Tenergies and Tdipoles.
 
     Returns
     -------
-    None.
+    Tenergy: float or list. Transition energy for the requested states.
+    Tdipole: Numpy array. Transition dipole moment for the requested states.
+    tdm: Numpy array. Transition density matrix.
 
     """
     nstates = 1 if isinstance(state_id,int) else len(state_id)    
@@ -354,13 +385,15 @@ def do_tddft(mf,o_A,v_A,state_id=0):
     if isinstance(state_id,list):
         Tenergy = [td.e[i] for i in state_id]
         Tdipole = [td.transition_dipole()[i] for i in state_id]
+        
+        cis_A = td.xy[state_id[0]][0] #Not implemented for multiple states since the TDM is too large
     else:
         Tdipole = td.transition_dipole()[state_id]
         Tenergy = td.e[state_id]
 
-    # The CIS coeffcients, shape [nocc,nvirt]
-    # Index 0 ~ X matrix/CIS coefficients, Index Y ~ Deexcitation Coefficients
-    cis_A = td.xy[0][0] #[state_id][0]
+        # The CIS coeffcients, shape [nocc,nvirt]
+        # Index 0 ~ X matrix/CIS coefficients, Index Y ~ Deexcitation Coefficients
+        cis_A = td.xy[state_id][0]
  
     #Calculate Ground to Excited State (Transition) Density Matrix
     tdm = np.sqrt(2) * o_A.dot(cis_A).dot(v_A.T)
@@ -370,20 +403,19 @@ def do_tddft(mf,o_A,v_A,state_id=0):
 
 def Process_MD(u,sel_1,sel_2,coord_path='/coord_files/MD_atoms'):
     """
-    
+    Function that takes the DNA+dimer trajectory (as an MDAnalysis object)
+    and returns the coordinates of the isolated monomers. 
 
     Parameters
     ----------
-    u   : MDAnalysis universe
-        Object containing MD trajectory
-    sel_1 : str
-        String with the residue name of Molecule A.
-    sel_2 : str
-        String with the residue name of Molecule B.
+    u : MDAnalysis universe. Object containing the MD trajectory
+    sel_1 : str. String with the residue id of Molecule A.
+    sel_2 : str. String with the residue id of Molecule B.
 
     Returns
     -------
-    None.
+    coordA/coordB : Numpy array, Coordinates for isolated monomers A and B.
+    Rab: Numpy array. Center of mass distance vector between molecules A and B.
 
     """
     frameN = u.trajectory.frame
