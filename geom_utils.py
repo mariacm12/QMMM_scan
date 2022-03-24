@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 13 11:30:47 2020
-
+Useful functions for geometry manipulation
 @author: mariacm
 """
 import os 
