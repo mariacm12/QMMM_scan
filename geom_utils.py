@@ -13,7 +13,6 @@ from math import sqrt, pi, cos, sin
 
 #MD analysis tools
 import MDAnalysis as mda
-import couplingutils as cu
 
 
 
@@ -31,14 +30,14 @@ Rx = lambda th: np.array([[1,0,0],
                           [0,cos(th),-sin(th)],
                           [0,sin(th),cos(th)]])
 
-def get_dihedral(param, traj_path, ntrajs=8, reps=['A','B'],resnum1='11',resnum2='12'):
+def get_dihedral(param, traj_file, ntrajs=8, reps=['A','B'],resnum1='11',resnum2='12'):
     """
     Returns the list of dihedral angles for a trajectory, averaged over the repetitions.  
 
     Parameters
     ----------
     param : string. The .prmtop parameter file       
-    traj_path : string. The location of the .nc trajectory file, 
+    traj_file : string. The location of the .nc trajectory file, 
                 including the file prefix and excluding the rep and traj number identifier.
     ntrajs : int. Total number of trajectory files per rep. The default is 8.
     reps : list. A list of strings with the reps labels (as in the file format).
@@ -66,7 +65,7 @@ def get_dihedral(param, traj_path, ntrajs=8, reps=['A','B'],resnum1='11',resnum2
         for ic in range(1,ntrajs+1):   
          
             ##Importing MD trajectories
-            u = mda.Universe(param, traj_path+rep+str(ic)+".nc", format="TRJ")
+            u = mda.Universe(param, traj_file+rep+str(ic)+".nc", format="TRJ")
             #u = mda.Universe("%s/Sq%s_dimer.prmtop"%(path,typ), "%s/prod/Sq%sDim_prod%s"%(path,typ,rep)+str(ic)+".nc", format="TRJ")
     
             tin = 0
@@ -145,20 +144,20 @@ def RAB_calc(u, dt, selA, selB, Rabs=[]):
     
     return Rabs
 
-def get_RAB(param, traj_path, rep, ntrajs=8, traji=1, dt=5, resnum1='11', resnum2='12'):
+def get_RAB(param, traj_file, ntrajs=8, traji=1, dt=5, resnum1='1', resnum2='2'):
     """
-    Returns an array with the center of mass distance along a trajectory
+    Returns an array with the center of mass distance along a trajectory. 
+    Written QM trajectories splitted in multiple files.
 
     Parameters
     ----------
     param : string. Paramenter file.
-    traj_path : string. Location of the trajectory .nc file, including file prefix.
-    rep : string. Name given to trajectory repetition.
-    ntrajs : int. Numper of trajectory file to include.
+    traj_path : string. Trajectory file prefix (Paht+name excluding traj index and .nc)
+    ntrajs : int. Number of trajectory files to include.
     traji : initial trajectory file to include in the output.
     dt : int. Time step.
-    resnum1 : string, The residue id of the first monomer. The default is '11'.
-    resnum2 : string, The residue id of the second monomer. The default is '12'.
+    resnum1 : string, The residue id of the first monomer. The default is '1'.
+    resnum2 : string, The residue id of the second monomer. The default is '2'.
 
     Returns
     -------
@@ -173,10 +172,10 @@ def get_RAB(param, traj_path, rep, ntrajs=8, traji=1, dt=5, resnum1='11', resnum
     for ic in range(traji,ntrajs+1):   
      
         ##Importing MD trajectories
-        u = mda.Universe(param, traj_path+rep+str(ic)+".nc", format="TRJ")
+        u = mda.Universe(param, traj_file+str(ic)+".nc", format="TRJ")
    
         
-        print("RAB Traj #%s, rep %s" %(str(ic),rep))
+        print("RAB Traj #%s" %(str(ic)))
         
         Rabs = RAB_calc(u, dt, selA, selB, Rabs=Rabs)
             
@@ -187,19 +186,20 @@ def get_RAB(param, traj_path, rep, ntrajs=8, traji=1, dt=5, resnum1='11', resnum
 
 
 
-def get_coords(path, param_file, select, file_idx=None, dt=2, resnum1='11', resnum2='12', cap=True):
+def get_coords(traj_file, param_file, select, file_idx=None, dt=2, resnum1='1', resnum2='2', cap=True, del_list=[]):
     """
     Given a selected time in a given traj file, it returns the (MDAnalysis) molecule params.    
 
     Parameters
     ----------
-    path : String. Path of the trajectory file .nc including file preffix.
+    traj_file : String. Path of the trajectory file .nc, excluding traj index.
+                Also takes full file name of pdb and restrt formats.
     param_file : String. Parameter .prmtop file.
-    sfile_idx : int. The index of the file trajectory to extract.
+    file_idx : int. The index of the file trajectory to extract.
     select : Index of the frame to extract.
     dt : int. Time step.
-    resnum1 : string, The residue id of the first monomer. The default is '11'.
-    resnum2 : string, The residue id of the second monomer. The default is '12'.
+    resnum1 : string, The residue id of the first monomer. The default is '1'.
+    resnum2 : string, The residue id of the second monomer. The default is '2'.
     cap : Whether to cap phosphate molecules with hydrogen atoms.
     
 
@@ -211,21 +211,20 @@ def get_coords(path, param_file, select, file_idx=None, dt=2, resnum1='11', resn
 
     """
     
-    from couplingutils import cap_H
+    from couplingutils import cap_H_general
     
-    if path[-2:] == 't7':
+    if traj_file[-2:] == 't7':
         #To get universe from a rst7 file
-        u = mda.Universe(param_file, path, format="RESTRT")
+        u = mda.Universe(param_file, traj_file, format="RESTRT")
         select = 0
         dt = 1
-    elif path[-2:] == 'db':
+    elif traj_file[-2:] == 'db':
         #To get universe from a pdb file
-        u = mda.Universe(path, format="PDB")
+        u = mda.Universe(traj_file, format="PDB")
         select = 0
         dt = 1
     else:
         #To get universe form a nc trajectory
-        traj_file = path
         u = mda.Universe(param_file, traj_file+str(file_idx)+".nc", format="TRJ")
         print("The param file is: %s \n" % (param_file),
               "And the traj files is: ",traj_file+str(file_idx)+".nc")
@@ -249,64 +248,15 @@ def get_coords(path, param_file, select, file_idx=None, dt=2, resnum1='11', resn
             # First 4 bonds aren't accurate
             bondsA = agA.atoms.bonds.to_indices()[4:]
             bondsB = agB.atoms.bonds.to_indices()[4:]
-            idsA = agA.atoms.ids
-            idsB = agB.atoms.ids
             
-            if cap:
-                namesA, xyzA, typA, bondsA = cap_H(u,xyzA,namesA,typA,bondsA,idsA,resnum1)
-                namesB, xyzB, typB, bondsB = cap_H(u,xyzB,namesB,typB,bondsB,idsB,resnum2)
+            if cap: #cap bonds not implemented yet
+                namesA, xyzA, typA, [] = cap_H_general(u,agA,resnum1,del_list=del_list)
+                namesB, xyzB, typB, [] = cap_H_general(u,agB,resnum2,del_list=del_list)
             
             CofMA = agA.center_of_mass()
             CofMB = agB.center_of_mass()
 
     return xyzA, xyzB, namesA, namesB, typA, typB, bondsA, bondsB, CofMA, CofMB
-
-def get_pyscf(path, param_file, select, file_idx=None, dt=2, resnum1='11', resnum2='12', new_coords=None):
-    """
-    Given a selected time-frame, it returns the molecule's coords as a PySCF 
-        formatted string.
-
-    Parameters
-    ----------
-    path : String. Path of the trajectory file .nc including file preffix.
-    param_file : String. Parameter .prmtop file.
-    file_idx : int. The index of the file trajectory to extract.
-    select : Index of the frame to extract.
-    dt : int. Time step.
-    resnum1 : string, The residue id of the first monomer. The default is '11'.
-    resnum2 : string, The residue id of the second monomer. The default is '12'.
-    new_coords : numpy array, optional. 
-       If given, modified coordinates are used instead of those in the frame.
-
-    Returns
-    -------
-    xyzA, xyzB : numpy arrays with coordinates in PySCF format
-
-    """
-
-    if path[-2:] == 't7':
-        #To get universe from a rst7 file
-        u = mda.Universe(param_file, path, format="RESTRT")
-        select = 0
-        dt = 1
-    elif path[-2:] == 'db':
-        #To get universe from a pdb file
-        u = mda.Universe(path, format="PDB")
-        select = 0
-        dt = 1
-    else:
-        #To get universe form a nc trajectory
-        traj_file = path
-        u = mda.Universe(param_file, traj_file+str(file_idx)+".nc", format="TRJ")
-        print("The param file is: %s \n" % (param_file),
-              "And the traj files is: ",traj_file+str(file_idx)+".nc")
-        
-    for fi, ts in enumerate(u.trajectory[::dt]):
-
-        if fi == select:
-            xyzA,xyzB,RAB = cu.Process_MD(u,resnum1,resnum2,coord_path="coord_files/MD_atoms", new_coords=new_coords)
-
-    return xyzA, xyzB
 
 def coord_transform(xyzA, xyzB, namesA, namesB, rot_angles, dr=None, assign=None):
     """ 
@@ -438,7 +388,7 @@ def multipole_coup(pos1, pos2, ch1, ch2, at1, at2, atH1, atH2):
 
     return Vij
 
-def get_mol(coords, names, types, bonds, res_names):
+def get_mol(coords, names, types, res_names):
     """ 
     Creates new MDAnalysis object based on given paramenters
 
@@ -450,8 +400,6 @@ def get_mol(coords, names, types, bonds, res_names):
         List of NumPy arrays/lists of length Nmolecules with atomic names.
     types : list
         List of NumPy arrays/lists of length Nmolecules with atomic types.
-    bondsA : list
-        List of NumPy arrays/lists of length Nmolecules with atomic bonds.
     res_names : list
         List of strings with residue names.
 
@@ -600,13 +548,13 @@ def solvent_coords(path, param_file, file_idx, select, dt=2):
 
     return coord, charge
 
-def get_pdb(path, param_file, path_save, resnums, select=(1,0), dt=2, MDA_selection='all'):
+def get_pdb(traj_file, param_file, path_save, resnums, select=(1,0), dt=2, MDA_selection='all'):
     """
     Returns pdb file of trajectory snapshot of indicated residues.
 
     Parameters
     ----------
-    path : String. Path of the trajectory file .nc including file preffix.
+    traj_file : String. Path of the trajectory file .nc including file preffix.
     param_file : String. Parameter .prmtop file.
     path_save : String. Path to save pdb file.
     resnums : tuple/list. Residue ids for the dimer molecules.
@@ -621,12 +569,12 @@ def get_pdb(path, param_file, path_save, resnums, select=(1,0), dt=2, MDA_select
     """
     
     i_file, idx = select
-    xyza, xyzb, namesA, namesB, typeA, typeB, bondsA, bondsB, __, __ = get_coords(path, param_file, 
+    xyza, xyzb, namesA, namesB, typeA, typeB, __, __, __, __ = get_coords(traj_file, param_file, 
                                                                           idx, file_idx=i_file, dt=dt, 
                                                                           resnum1=resnums[0], resnum2=resnums[1])
 
     orig_mol = get_mol([xyza, xyzb], [namesA, namesB], [typeA, typeB], 
-                       [bondsA[:-5], bondsB[:-5]], res_names=['SQA', 'SQB'])
+                       res_names=['MOA', 'MOB'])
 
     #save pdb
     orig_all = orig_mol.select_atoms(MDA_selection)
@@ -665,21 +613,10 @@ def COM_atom(COM, xyz, names):
     
     return closer_idx, xyz[closer_idx], names[closer_idx]
     
-
-def energy_diagram(file_list, global_min, time):
-    eV_conv = 27.211399
-    energies = np.empty((0,2))
-    for f in file_list:
-        data = np.loadtxt(f)
-        energies = np.concatenate((energies,data))
-
-    energies = eV_conv*(energies-global_min)
-        
-    return energies
             
 def displaced_dimer(sel1, sel2, cof_dist, disp, 
                     atom_orig='N1', atom_z='N2', atom_y='C2', 
-                    res_names=['SQA', 'SQB']):
+                    res_names=['MOA', 'MOB']):
     """
     Returns dimer where monomers are displaced from each other by the given parameters.
 
