@@ -1,4 +1,4 @@
-# QMMM_tools
+# QMMM_scan
 Code for studying the Electronic Structure properties of chromophores in dissordered systems. 
 Provides functions for studying the molecules based on Molecular Dynamics (MD) simulations.
 
