@@ -1,7 +1,6 @@
 """
 Calculate Excitation Energies and Couplings Via TDDFT
-From: "Steering charge-transfer state formation in strongly-coupled dimers using DNA scaffolds"
-       (in preparation)
+From: "Activating charge-transfer state formation in strongly-coupled dimers using DNA scaffolds" 
 
 Author: Maria Castellanos
 Willard Group, MIT
@@ -22,7 +21,7 @@ import MDAnalysis
 from csv import reader
 
 #All functions to calculate coupling
-import couplingutils as cp
+import dyeScreen.commons.couplingutils as cp
 
 #Defining relevant paramters
 H_to_eV = 27.211 #All couplings are in a.u.

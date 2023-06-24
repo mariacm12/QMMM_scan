@@ -1,0 +1,15 @@
+Initial minimization of solvent + ions
+ &cntrl
+  imin   = 1,
+  maxcyc = 1000,
+  ntb    = 1,
+  ntr    = 1,
+  iwrap  = 1,
+  cut    = 12.0
+/
+Hold the molecule fixed
+100.0
+RES 1 2
+END
+END
+~                           
