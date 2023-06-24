@@ -3,7 +3,8 @@ Code for studying the Electronic Structure properties of chromophores in dissord
 &  High-Throughput Screening of Molecules in DNA Scaffolding (*in the works*)
 Provides functions for studying the molecules based on Molecular Dynamics (MD) simulations.
 
-** Inside the dyeScreen folder:**
+**Inside the dyeScreen folder:**
+
 -**`commons/couplingutils`**: Functions for carrying out Quantum Mechanical (QM) calculations from MD trajectory coordinates. 
 All QM is performed in PySCF, MD trajectories are process with MDAnalaysis.
 - **`commons/geom_utils`**: Functions for geometry manipulation/processing from MD trajectories or PDB files data. Integration is done using MDAnalyisis. 
