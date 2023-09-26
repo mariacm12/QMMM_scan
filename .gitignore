@@ -26,6 +26,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.conda/
+*.DS_Store*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -128,5 +130,21 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# custom
-full.h5
+
+# custon (editable)
+mopac
+untitled.py
+pdb_process.py
+samples*
+ANTECHAMBER*
+sqm*
+ATOMTYPE*
+dimer_*
+*.txt
+older_versions/*
+*.docx
+*.key
+*.frcmod
+*.mol2
+*in
+*png
